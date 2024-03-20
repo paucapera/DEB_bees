@@ -1,0 +1,463 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import random
+from scipy.optimize import fsolve
+from matplotlib import pyplot as P
+from matplotlib import colors, ticker, cm
+from copy import copy, deepcopy
+import datetime
+
+plt.rcParams.update({'font.size': 14})
+    
+
+############### Depleted Boltzmann Distribution - Spatial Model for Foraging #############
+def equations_N(u0,F0):
+	u,F,N = u0,F0[0],F0[1]
+	f = []
+	for i in range(len(u)):
+		f.append(u[i]-np.exp(((C_N*F[i]/(F[i]+C_N*N)) -(C_C*d[i]))/T)/np.sum(np.exp(((C_N*F/(F+C_N*N*np.full(len(F),1))) -(C_C*d))/T)))
+	return f
+	
+def equations_P(u0,F0):
+	u,F,N = u0,F0[0],F0[1]
+	f = []
+	for i in range(len(u)):
+		#f.append(u[i]-np.exp(((C_P*F[i]/(F[i]+C_P*N)) -(C_C*d[i]))/T)/np.sum(np.exp(((C_P*F/(F+C_P*N*np.full(len(F),1))) -(C_C*d))/T)))
+		f.append(u[i]-np.exp(((C_P*F[i]/(F[i]+C_P*N)) -(1.*C_P*d[i]/np.sqrt(2.*max_range_landscape**2)))/T)/np.sum(np.exp(((C_P*F/(F+C_P*N*np.full(len(F),1))) -(1.*C_P*d/np.sqrt(2.*max_range_landscape**2)))/T)))
+	return f
+
+################################## Model Parameters ######################################
+years = 10
+Nxy = 5			# Landscape size, better an odd eps_Pmber so the center is distance 0
+T = 0.1			# Inverse optimality foraging
+time=150. 		# Simulation time
+dt=0.1			# time steps
+
+C_N = 1.2		# Nectar Ingestion ratio
+C_P = 0.8		# Pollen Ingestion ratio
+C_NM = 0.025	# Nectar maintenance ratio
+C_PM = 0.05*1.2 # Pollen maintenance ratio
+C_H = 0.#0.03#0.03		# Heating cost ratio
+C_C = 0.4		# Travel cost ratio
+C_J = 0.		# Maturity cost ratio
+eps_V = 0.001	# Initial structural energy
+teta = 0.5		# Nectar evaporation ratio
+kappa = 1.		# DEB parameter
+eps_P = 0.5		# Minimal pollen for growth
+eps_N = 0.1		# Minimal nectar for growth
+EG = 1/8.5		# Pollen to Structural energy ratio
+delta1 = 0.05	# Worker death rate
+delta2 = 1.		# Nectar dependent worker death rate
+lambda0 = 5#5.	# Pollen to nectar storage ratio
+gamma_P = 0.001	# Landscape saturating pollen
+gamma_N = 0.001	# Landscape saturating nectar
+eps = 0.00001	# Small value for numerical porpuses
+alpha = 1		# Worker to structural energy ratio
+
+R = 1			# Number of colonies
+C_R = 5.0
+deltaR = 0.12
+
+max_range_landscape = 3 # Maximal range of landscape considered				
+
+############################# LANDSCAPE SETTING ##########################################
+F0_N,F0_P,d = [],[],[]
+for i in range(Nxy):
+	for j in range(Nxy):
+		d.append((max_range_landscape/(Nxy/2-0.5))*np.sqrt((Nxy/2-i-0.5)**2+(Nxy/2-j-0.5)**2))
+
+### Landscape for distance
+# 		if i==3 and j==3:
+# 			F0_N.append(50.01  )#/(0.04*Nxy**2))#distance 100
+# 			F0_P.append(0.01  )#/(0.04*Nxy**2))#distance 0.1
+# 		elif i==int(Nxy/2) and j==int(Nxy/2):
+# 			F0_N.append(0.01  )#/(0.04*Nxy**2))
+# 			F0_P.append(10.01  )#/(0.04*Nxy**2))
+# 		else:
+# 			F0_N.append(0.01  )#/(0.04*Nxy**2))
+# 			F0_P.append(0.01  )#/(0.04*Nxy**2))
+
+### Landscape for crop bloom - 2,4,10
+# 		if i==int(Nxy/2) and j==int(Nxy/2):
+# 			F0_N.append(1.*0.5  /(0.04*Nxy**2))#distance 100
+# 			F0_P.append(.2*0.1  /(0.04*Nxy**2))#distance 0.1
+# 		else:
+# 			F0_N.append(1.*0.5  /(0.04*Nxy**2))
+# 			F0_P.append(.2*0.1  /(0.04*Nxy**2))
+
+# ### Multiple season background #Plot population
+		if i==int(Nxy/2) and j==int(Nxy/2):
+			F0_N.append(1000*5*1.*0.5  /(0.04*Nxy**2))#distance 100
+			F0_P.append(1000*1.*1.*0.1  /(0.04*Nxy**2))#distance 0.1
+		else:
+			F0_N.append(1000*5*1.*0.5  /(0.04*Nxy**2))
+			F0_P.append(1000.*1.*1.*0.1  /(0.04*Nxy**2))
+			
+# ### Multiple season background #POLLINATION SERVICES
+# 		if i==int(Nxy/2) and j==int(Nxy/2):
+# 			F0_N.append(5*1.*0.5  /(0.04*Nxy**2))#distance 100
+# 			F0_P.append(1.*1.*0.1  /(0.04*Nxy**2))#distance 0.1
+# 		else:
+# 			F0_N.append(5*1.*0.5  /(0.04*Nxy**2))
+# 			F0_P.append(1.*1.*0.1  /(0.04*Nxy**2))
+
+### Landscape for limiting resource and shortcut
+# 		if i==int(Nxy/2) and j==int(Nxy/2):
+# 			F0_N.append(50.01  /(0.04*Nxy**2))#distance 100
+# 			F0_P.append(1.01  /(0.04*Nxy**2))#distance 0.1
+# 		else:
+# 			F0_N.append(0.01  /(0.04*Nxy**2))
+# 			F0_P.append(0.01  /(0.04*Nxy**2))
+
+### Conversion to 2D landscape for plotting purpose			
+landscape_2D_N,landscape_2D_P = [],[]
+for i in range(Nxy):
+	landscape_2D_N.append([])
+	landscape_2D_P.append([])
+	for j in range(Nxy):
+		landscape_2D_N[i].append(F0_N[Nxy*i+j])
+		landscape_2D_P[i].append(F0_P[Nxy*i+j])
+
+d = np.array(d)
+F0_N,F0_P = np.array(F0_N),np.array(F0_P)
+
+################################ Initiating Variables ####################################
+
+time_time = []
+V_time,N_time,P_time = [],[],[]
+n_N_time,n_P_time = [],[]
+FN_time,FP_time = [],[]
+depletion_crop_N_time,depletion_crop_P_time,depletion_crop_time = [],[],[]
+
+R_year = [R]
+
+F_N,F_N0,F_P,F_P0 = deepcopy(F0_N),deepcopy(F0_N),deepcopy(F0_P),deepcopy(F0_P)
+#F_N,F_N0,F_P,F_P0 = F0_N,F0_N,F0_P,F0_P
+FN_time_2D,FP_time_2D = [],[]
+crop_P,crop_N = 0,0
+WF_P,WF_N =0,0
+
+################################### DEB SOLVER ###########################################
+F0_N_original,F0_P_original = deepcopy(F0_N),deepcopy(F0_P)
+for year in range(years):
+	depletion_crop_N,depletion_crop_P = 0,0
+	
+	#### LOOP THE BACKGROUND
+	#F0_N,F0_P = (10**(year/5-1))*F0_N_original,(10**(year/5-1))*F0_P_original
+	#print (10**(year/5-1),F0_N,F0_P)
+	
+	u0 = []
+	for i in range(Nxy*Nxy):
+		u0.append(1./(Nxy*Nxy))
+	u_N0=u0
+	u_P0=u0
+	N0,P0,V0 = 1.,1.,eps_V
+	n_N,n_P = V0/2,V0/2
+	F_N,F_N0,F_P,F_P0 = deepcopy(F0_N),deepcopy(F0_N),deepcopy(F0_P),deepcopy(F0_P)
+	time_time.append(dt*year*int(time/dt))
+	V_time.append(V0)
+	N_time.append(N0)
+	P_time.append(P0)
+	n_N_time.append(n_N)
+	n_P_time.append(n_P)
+	FN_time.append(np.sum(F0_N))
+	FP_time.append(np.sum(F0_P))
+	#F_N,F_N0,F_P,F_P0 = F0_N,F0_N,F0_P,F0_P
+	#print (N0,P0,V0,R)
+	#print (F0_N,F_N0,F0_P,F_P0)
+	
+	for t in range(int(time/dt)-1):
+		time_time.append(t*dt+year*dt*int(time/dt))
+		if (100*t/time)%10==0:
+			print ('%',10*t/time)
+			#print ('Crop depletion',depletion_crop_N+depletion_crop_P,depletion_crop_N,depletion_crop_P)
+		#print ("%", float(t)/float(time/dt))
+		u_N=(fsolve(equations_N, u_N0,[F_N0,n_N]))
+		u_P=(fsolve(equations_P, u_P0,[F_P0,n_P]))#
+		#print (np.sum(u_N),np.sum(u_P))
+	
+	###SHORCUT
+# 		if t>(int(time/dt)/4):
+# 			#F0_N=np.zeros(Nxy*Nxy)
+# 			#F_N0=np.zeros(Nxy*Nxy)
+# 			F0_P=np.zeros(Nxy*Nxy)
+# 			F_P0=np.zeros(Nxy*Nxy)
+	
+	### CROP BLOOM
+# 		if (t>(int(time/dt)/2)-100) and (t<(int(time/dt)/2)+100):
+# 			crop_N = 50
+# 			crop_P = 10
+# 		else:
+# 			crop_N = 0
+# 			crop_P = 0
+
+	### WILDFLOWERS BLOOM
+		##### LOOP THE COMPOSITION
+		#relative_composition = (-100+year*10) /100 #
+		relative_composition = 0 /100 #
+		relative_quantity = 50 /100
+		loc_WF_x,loc_WF_y = 0,0
+		
+		a = (relative_composition+1)/2
+		b = (1-relative_composition)/2
+		#print (a,b)
+		q = relative_quantity
+
+# 		if (t>(int(time/dt)/2)-100) and (t<(int(time/dt)/2)+100):#t>0:#
+# 			#crop_N = a*50*2
+# 			#crop_P = b*10*2
+# 			crop_N = a*5000*2
+# 			crop_P = b*1000*2
+# 		else:
+# 			crop_N = 0
+# 			crop_P = 0
+# 		#WF_N = q*b*5000*2
+# 		#WF_P = q*a*1000*2
+# 		WF_N = 0
+# 		WF_P = 0
+# 		if (t>(int(time/dt)/2)-100) and (t<(int(time/dt)/2)+100):#simultaneous
+# 			WF_N = b*q*5000.*2
+# 			WF_P = a*q*1000.*2
+# 		if (t<(int(time/dt)/2)-100):#before
+# 			WF_N = b*q*5000.*2
+# 			WF_P = a*q*1000.*2
+# 		if (t>(int(time/dt)/2)+100):#after
+# 			WF_N = b*q*5000.*2
+# 			WF_P = a*q*1000.*2
+# 		if t>0: #All time
+# 			WF_N = b*q*5000.*2
+# 			WF_P = a*q*1000.*2	
+# 		if (t<(int(time/dt)/2)-100) or (t>(int(time/dt)/2)+100): #before and after
+# 			WF_N = b*q*5000.*2
+# 			WF_P = a*q*1000.*2
+
+					
+
+		#print (crop_N,crop_P,WF_N,WF_P)
+
+		
+		density_N,density_P,depletion_N,depletion_P,dd = [],[],[],[],[]
+		if (P0==0 and N0==0):
+			n_N = lambda0*V0/(lambda0+1)
+			n_P = V0/(lambda0+1)
+		else:
+			n_N = 1.*(lambda0*P0+10*eps_P)*alpha*V0/((lambda0*P0+10*eps_P)+(N0+10*eps_N)+eps_V) 
+			n_P = 1.*(N0+10*eps_N)*alpha*V0/((lambda0*P0+10*eps_P)+(N0+10*eps_N)+eps_V)
+			#n_N = 0.9*lambda0*P0*V0/(lambda0*P0+N0+eps_V) + 0.1*N0*V0/(lambda0*P0+N0+eps_V)
+			#n_P = 0.9*N0*V0/(lambda0*P0+N0+eps_V) + 0.1*lambda0*P0*V0/(lambda0*P0+N0+eps_V)
+			
+		for i in range(Nxy):
+			dd.append([])
+			density_N.append([])
+			density_P.append([])
+			for j in range(Nxy):
+				dd[i].append(d[Nxy*i+j])
+				density_N[i].append(u_N[i*Nxy+j*1])
+				density_P[i].append(u_P[i*Nxy+j*1])
+				depletion_N.append((C_N*F_N0[Nxy*i+j]*n_N*u_N[i*Nxy+j*1])/(F_N0[Nxy*i+j]+C_N*n_N*u_N[i*Nxy+j*1]))
+				depletion_P.append((C_P*F_P0[Nxy*i+j]*n_P*u_P[i*Nxy+j*1])/(F_P0[Nxy*i+j]+C_P*n_P*u_P[i*Nxy+j*1]))
+				#depletion_N.append(np.min([F_N0[Nxy*i+j],C_N*n_N*u_N[i*Nxy+j*1]]))
+				#depletion_P.append(np.min([F_P0[Nxy*i+j],C_P*n_P*u_P[i*Nxy+j*1]]))
+				#if i==int(Nxy/2) and j==int(Nxy/2):
+				#	print ('depP',n_P,F_P0[Nxy*i+j],C_P*n_P*u_P[i*Nxy+j*1],(C_P*F_P0[Nxy*i+j]*n_P*u_P[i*Nxy+j*1])/(F_P0[Nxy*i+j]+C_P*n_P*u_P[i*Nxy+j*1]))
+				#	print ('depN',n_N,F_N0[Nxy*i+j],C_N*n_N*u_N[i*Nxy+j*1],(C_N*F_N0[Nxy*i+j]*n_N*u_N[i*Nxy+j*1])/(F_N0[Nxy*i+j]+C_N*n_N*u_N[i*Nxy+j*1]))
+				
+				### Solving Landscape
+				if i==int(Nxy/2) and j==(int(Nxy/2)-1):
+					F_N[Nxy*i+j] = dt*(crop_N+F0_N[Nxy*i+j]-depletion_N[-1]-gamma_N*F_N0[Nxy*i+j]**2)+F_N0[Nxy*i+j]
+					F_P[Nxy*i+j] = dt*(crop_P+F0_P[Nxy*i+j]-depletion_P[-1]-gamma_P*F_P0[Nxy*i+j]**2)+F_P0[Nxy*i+j]
+					if crop_N!=0 or crop_P!=0:
+						depletion_crop_N += (C_N*F_N0[Nxy*i+j]*n_N*u_N[i*Nxy+j*1])/(F_N0[Nxy*i+j]+C_N*n_N*u_N[i*Nxy+j*1])
+						depletion_crop_P += (C_P*F_P0[Nxy*i+j]*n_P*u_P[i*Nxy+j*1])/(F_P0[Nxy*i+j]+C_P*n_P*u_P[i*Nxy+j*1])
+				elif i==(int(Nxy/2))+loc_WF_x and j==(int(Nxy/2)+loc_WF_y):
+					F_N[Nxy*i+j] = dt*(WF_N+F0_N[Nxy*i+j]-depletion_N[-1]-gamma_N*F_N0[Nxy*i+j]**2)+F_N0[Nxy*i+j]
+					F_P[Nxy*i+j] = dt*(WF_P+F0_P[Nxy*i+j]-depletion_P[-1]-gamma_P*F_P0[Nxy*i+j]**2)+F_P0[Nxy*i+j]				
+				else:
+					F_N[Nxy*i+j] = dt*(F0_N[Nxy*i+j]-depletion_N[-1]-gamma_N*F_N0[Nxy*i+j]**2)+F_N0[Nxy*i+j]
+					F_P[Nxy*i+j] = dt*(F0_P[Nxy*i+j]-depletion_P[-1]-gamma_P*F_P0[Nxy*i+j]**2)+F_P0[Nxy*i+j]
+		
+		### Solving State Variables #V_time[year*int(time/dt):(t+year*int(time/dt))]
+		#print (year*int(time/dt),(t+year*int(time/dt)+1),np.max(V_time[year*int(time/dt):(t+year*int(time/dt)+1)]))
+		N = dt*(np.sum(depletion_N) - C_NM*V0 - C_H*np.max(V_time[year*int(time/dt):(t+year*int(time/dt)+1)]) - C_C*np.sum((n_N*np.array(density_N)+n_P*np.array(density_P))*np.array(dd)) - teta*N0) + N0
+		P = dt*(np.sum(depletion_P) - C_PM*V0 - kappa*(P0/(P0+np.sqrt(V0)*eps_P))*(N0/(N+np.sqrt(V0)*eps_N))) + P0
+		V = dt*((R/EG)*kappa*(P0/(P0+np.sqrt(V0)*eps_P))*(N0/(N0+np.sqrt(V0)*eps_N)) - C_J*R - (delta1+delta2*np.exp(-N0/eps_N))*V0) + V0
+
+		#print ('travel N',C_C*np.sum((n_N*np.array(u_N[i*Nxy+j*1]))*np.array(dd)),n_N)
+		#print ('travel P',C_C*np.sum((n_P*np.array(u_P[i*Nxy+j*1]))*np.array(dd)),n_P)
+	# 	print ('V',V0,(R/EG)*kappa*(P/(P+eps_P))*(N/(N+eps)),-(delta1+delta2*np.exp(-N0/eps_N))*V0,np.sum(np.array(u_N[i*Nxy+j*1])*np.array(dd)))
+	# 	print ('P',P0,n_P,np.sum(depletion_P),- C_PM*V0,- kappa*(P/(P+eps_P))*(N/(N+eps)))
+	# 	print ('N',N0,n_N,np.sum(depletion_N),- C_NM*V0,- C_H*np.max(V_time),- C_C*np.sum((n_N*np.array(u_N[i*Nxy+j*1])+n_P*np.array(u_P[i*Nxy+j*1]))*np.array(dd)))
+	# 	print ('F_N',np.sum(F_N),np.sum(F0_N),-np.sum(depletion_N),-np.sum(0.01*F_N0**2),C_N*n_N)
+	# 	print ('F_P',np.sum(F_P),np.sum(F0_P),-np.sum(depletion_P),-np.sum(0.01*F_P0**2),C_P*n_P)
+	
+		
+		### Preventing negative values
+		F_N,F_P = np.max([F_N,np.zeros(len(F_N))],axis=0),np.max([F_P,np.zeros(len(F_P))],axis=0)
+		V,N,P = np.max([V,0]),np.max([N,0]),np.max([P,0])
+		
+		#V=60 #Fixing poulation
+		
+		u_N0,u_P0 = u_N,u_P
+		F_N0,F_P0 = F_N,F_P
+		V0,N0,P0 = V,N,P
+		
+		### Saving values
+		V_time.append(V0)
+		N_time.append(N0)
+		P_time.append(P0)
+		n_N_time.append(n_N)
+		n_P_time.append(n_P)
+		FN_time.append(np.sum(F_N0))
+		FP_time.append(np.sum(F_P0))
+		FN_time_2D.append([])
+		FP_time_2D.append([])
+		for i in range(Nxy):
+			FN_time_2D[t].append([])
+			FP_time_2D[t].append([])
+			for j in range(Nxy):
+				FN_time_2D[t][i].append(F_N[Nxy*i+j])
+				FP_time_2D[t][i].append(F_P[Nxy*i+j])
+	
+	depletion_crop_N_time.append(depletion_crop_N)
+	depletion_crop_P_time.append(depletion_crop_P)
+	depletion_crop_time.append(depletion_crop_N+depletion_crop_P)
+	print (R_year)
+	R = C_R*R*((np.arctan(0.1*(V/R-100))+np.pi/2)/np.pi) - (deltaR*R+0) + 0.5*R #The last term represents importation of colonies from surrounding habitat.
+	R = max(R,eps)
+	R_year.append(R)
+
+####################################### PLOT 0 ###########################################
+print 
+print(depletion_crop_time)
+plt.plot(depletion_crop_time)
+plt.show()
+
+####################################### PLOT 1 ###########################################
+
+fig, (ax1, ax2) = plt.subplots(2,gridspec_kw={'height_ratios': [1, 4]})
+plt.subplots_adjust(wspace=0.06, hspace=0.06)
+ax3 = ax2.twinx()
+ax1.plot(time_time,FN_time,c='b',linestyle='-.',label=r'$\sum F_i^N$')
+ax1.plot(time_time,FP_time,c='r',linestyle='-.',label=r'$\sum F_i^P$')
+#ax1.set_ylim([0, 2600])
+ax1.get_xaxis().set_visible(False)
+ax1.set_ylabel('Resource \n landscape \n (ml & g)', fontsize=10)
+#ax1.set_title('Landscape',y=1.0, pad=-14)
+plt.tick_params('x', labelbottom=False)
+#ax2.set_title('Colony',y=1.0, pad=-14)
+ax2.plot(time_time,V_time,c='g',label='V')
+ax2.plot(time_time,n_N_time,c='b',label=r'$n_N$')
+ax2.plot(time_time,n_P_time,c='r',label=r'$n_P$')
+#ax2.set_ylim([0, 160])
+ax3.plot(time_time,N_time,c='b',linestyle='--',label='N')
+ax3.plot(time_time,P_time,c='r',linestyle='--',label='P')
+#ax3.set_ylim([0, 90])
+ax2.set_ylabel('Population (#)')
+ax3.set_ylabel('Resource stored (ml & g)')
+ax2.set_xlabel('Time (days)')
+#fig.legend()
+#ax1.legend(label='Inline label')
+#fig.legend( loc='upper center', ncol=3)
+#plt.tight_layout()
+fig.savefig(str(datetime.datetime.now),bbox_inches='tight', dpi=300)
+plt.show()
+
+####################################### PLOT 2 ###########################################
+
+# fig = plt.figure(constrained_layout=True)
+# #plt.subplots_adjust(wspace=0.06, hspace=0.06)
+# axs = fig.subplot_mosaic([['TopLeft', 'TopRight'],['Bottom', 'Bottom']],
+#                           gridspec_kw={'width_ratios':[3.7, 1],'height_ratios': [1, 4]})
+# axs['TopLeft'].set_title('Temporal evolution \n of resource', fontsize=12)
+# axs['TopRight'].set_title('Spatial distribution \n of resource', fontsize=12)
+# #axs['Bottom'].set_title('Plot Bottom Right')
+# 
+# axs['TopLeft'].plot(time_time,FN_time,c='b',linestyle='-.')
+# axs['TopLeft'].plot(time_time,FP_time,c='r',linestyle='-.')
+# axs['TopLeft'].get_xaxis().set_visible(False)
+# #axs['TopLeft'].set_ylabel('Resource \n landscape \n (ml & g)', fontsize=10)
+# plt.tick_params('x', labelbottom=False)
+# 
+# #F_time_2D = FN_time_2D[0]/np.max(FN_time_2D[0])-FP_time_2D[0]/np.max(FP_time_2D[0])
+# F_time_2D = FN_time_2D[-1]/np.max(FN_time_2D[-1])-FP_time_2D[-1]/np.max(FP_time_2D[-1])
+# cf2 = axs['TopRight'].imshow(F_time_2D, cmap="coolwarm",alpha=1.)
+# #cf1 = axs['TopRight'].imshow( FN_time_2D[-1], cmap="Blues",alpha=0.9)
+# #fig.colorbar(cf1, ax=axs['TopRight'])
+# #cf2 = axs['TopRight'].imshow(FP_time_2D[-1], cmap="Reds",alpha=0.9)
+# #fig.colorbar(cf2, ax=axs['TopRight'])
+# axs['TopRight'].get_xaxis().set_visible(False)
+# axs['TopRight'].get_yaxis().set_visible(False)
+# 
+# ax4 = axs['Bottom'].twinx()
+# axs['Bottom'].plot(time_time,V_time,c='g',label='Total')
+# axs['Bottom'].plot(time_time,n_N_time,c='b',label='Nectar')
+# axs['Bottom'].plot(time_time,n_P_time,c='r',label='Pollen')
+# #ax2.set_ylim([0, 150])
+# ax4.plot(time_time,N_time,c='b',linestyle='--')
+# ax4.plot(time_time,P_time,c='r',linestyle='--')
+# #ax3.set_ylim([0, 2000])
+# axs['Bottom'].set_ylabel('Population (#)')
+# ax4.set_ylabel('Resource stored (ml & g)')
+# axs['Bottom'].set_xlabel('Time (days)')
+# #ax1.legend(label='Inline label')
+# #plt.tight_layout()
+# #fig.legend( loc='lower center', ncol=3)
+# axs['Bottom'].legend( fontsize=12, ncol=3,loc='upper center')
+# fig.savefig(str(datetime.datetime.now),bbox_inches='tight', dpi=300)
+# 
+# plt.show()
+
+####################################### PLOT 3 ###########################################
+
+##### SUBPLOTS
+# fig, (ax1, ax2) = plt.subplots(2)
+# FN,FP,UN,UP,travel = [],[],[],[],[]
+# for i in range(len(FN_time_2D[-1])):
+# 	travel.append(C_C*N*d[i])
+# 	FN.append(FN_time_2D[-1][int(len(FN_time_2D[-1])/2)][i])
+# 	FP.append(FP_time_2D[-1][int(len(FP_time_2D[-1])/2)][i])
+# 	UN.append((density_N[int(len(FN_time_2D[-1])/2)][i]))
+# 	UP.append((density_P[int(len(FN_time_2D[-1])/2)][i]))
+# #ax1.plot(travel,c='g')
+# ax1.plot(FN,c='b')
+# ax1.plot(FP,c='r')
+# ax1.set_title('F')
+# ax2.plot(UN,c='b')
+# ax2.plot(UP,c='r')
+# ax2.set_title('u')
+# plt.show()
+
+####################################### PLOT 4 ###########################################
+
+# density_P = np.log(np.array(density_P))
+# density_N = np.log(np.array(density_N))
+# fig, (ax1, ax2,ax3,ax4) = plt.subplots(1, 4, figsize=(24,6))
+# #norm = mpl.colors.Normalize(vmin=-20, vmax=0)
+# #mycmap1 = plt.get_cmap('gist_earth')
+# ax1.set_aspect('equal')
+# ax1.set_title('Resource N')
+# #cf1 = ax1.contourf(x, y, landscape_2D_N, cmap="YlOrRd")
+# cf1 = ax1.imshow( FN_time_2D[-1], cmap="YlGnBu")
+# #cf1 = ax1.contourf(x, y, FN_time_2D[-1], cmap="YlGnBu")
+# fig.colorbar(cf1, ax=ax1)
+# #mycmap2 = plt.get_cmap('geps_Pplot2')
+# ax2.set_aspect('equal')
+# ax2.set_title('Resource P')
+# #cf2 = ax2.contourf(x, y, landscape_2D_P, cmap="YlGnBu")
+# cf2 = ax2.imshow(FP_time_2D[-1], cmap="YlOrRd")
+# fig.colorbar(cf2, ax=ax2)
+# #mycmap2 = plt.get_cmap('geps_Pplot2')
+# ax3.set_aspect('equal')
+# ax3.set_title('Foragers N')
+# #cf3 = ax3.imshow(density_N, cmap="Blues",vmin=-6.0,vmax=-3)
+# cf3 = ax3.imshow(density_N, cmap="Blues",vmin=-9.0,vmax=-1)
+# fig.colorbar(cf3, ax=ax3)
+# #mycmap1 = plt.get_cmap('gist_earth')
+# ax4.set_aspect('equal')
+# ax4.set_title('Foragers P')
+# #cf4 = ax4.imshow( density_P, cmap="Reds",vmin=-6.0,vmax=-3)
+# cf4 = ax4.imshow( density_P, cmap="Reds",vmin=-9.0,vmax=-1)
+# #cb=fig.colorbar(mesh,norm=norm)
+# fig.colorbar(cf4, ax=ax4)
+# plt.show()
+
